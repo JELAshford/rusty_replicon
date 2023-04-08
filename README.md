@@ -1,4 +1,4 @@
-<img src="src/silly_little_logo.png" alt="drawing" width="200"/>
+<img src="rsc/silly_little_logo.png" alt="drawing" width="200"/>
 
 # Rusty Replicon: Simulating Replication Timing from DNA Annotations
 
