@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.69"
+itertools = "0.10.5"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
+range-set-blaze = "0.1.2"
