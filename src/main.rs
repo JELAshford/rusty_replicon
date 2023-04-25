@@ -1,6 +1,6 @@
 use rand::{
     distributions::Distribution,
-    distributions::{Uniform, WeightedError, WeightedIndex},
+    distributions::{Uniform, WeightedIndex},
     prelude::*,
 };
 use rand_chacha::ChaCha8Rng;
@@ -39,10 +39,7 @@ impl Cell {
     fn is_fully_replicated(&self) -> bool {
         (self.replication_state.len() as isize) == (self.genome_length + 1)
     }
-    fn new_random_range(
-        &self,
-        rng_obj: &mut ChaCha8Rng,
-    ) -> Result<RangeInclusive<isize>, WeightedError> {
+    fn new_random_range(&self, rng_obj: &mut ChaCha8Rng) -> Option<RangeInclusive<isize>> {
         let compliment_ranges = self.genome_range.clone() - self.replication_state.clone();
         let num_samples = (self.max_forks * 3) as usize;
         let mut range_uniforms: Vec<Uniform<isize>> = Vec::with_capacity(num_samples);
@@ -61,9 +58,9 @@ impl Cell {
                         new_pos = samp_range.sample(rng_obj);
                     };
                 }
-                Ok((new_pos - self.replication_rate)..=(new_pos + self.replication_rate))
+                Some((new_pos - self.replication_rate)..=(new_pos + self.replication_rate))
             }
-            Err(_err) => Err(_err),
+            Err(_err) => None,
         }
     }
     fn full_replication(&mut self, g_phase_prob: f64) {
@@ -92,10 +89,7 @@ impl Cell {
 
             // Assign all the necessary un-assigned forks
             self.replication_state |= (0..(self.max_forks - assigned_forks - 1))
-                .filter_map(|_| match self.new_random_range(&mut rng) {
-                    Ok(new_range) => Some(new_range),
-                    Err(_err) => None,
-                })
+                .filter_map(|_| self.new_random_range(&mut rng))
                 .collect::<RangeSetBlaze<isize>>();
 
             // Move all forks
