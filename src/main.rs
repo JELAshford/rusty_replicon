@@ -5,7 +5,7 @@ use rand::{
 };
 use rand_chacha::ChaCha8Rng;
 use range_set_blaze::prelude::*;
-use std::{ops::RangeInclusive, thread, time::Duration, time::Instant};
+use std::{thread, time::Duration, time::Instant};
 
 #[derive(Debug, Default, Clone, PartialEq)]
 enum CellState {
@@ -16,29 +16,29 @@ enum CellState {
 
 #[derive(Debug, Default, Clone)]
 struct Cell {
-    genome_range: RangeSetBlaze<usize>,
-    genome_length: usize,
-    max_forks: usize,
+    genome_range: RangeSetBlaze<isize>,
+    genome_length: isize,
+    max_forks: isize,
     cell_state: CellState,
-    replication_rate: usize,
-    replication_state: RangeSetBlaze<usize>,
+    replication_rate: isize,
+    replication_state: RangeSetBlaze<isize>,
 }
 impl Cell {
-    fn new(genome_length: usize, num_replicators: usize, replication_rate: usize) -> Self {
+    fn new(genome_length: isize, num_replicators: isize, replication_rate: isize) -> Self {
         Cell {
             genome_range: RangeSetBlaze::from_iter([0..=genome_length]),
             genome_length,
             max_forks: num_replicators,
             cell_state: CellState::GPhase,
             replication_rate,
-            replication_state: RangeSetBlaze::<usize>::new(),
+            replication_state: RangeSetBlaze::<isize>::new(),
         }
     }
-    fn is_replicated(&self, position: usize) -> bool {
+    fn is_replicated(&self, position: isize) -> bool {
         self.replication_state.contains(position)
     }
     fn is_fully_replicated(&self) -> bool {
-        let total_length: usize = self
+        let total_length: isize = self
             .replication_state
             .ranges()
             .map(|r| r.end() - r.start())
@@ -47,21 +47,21 @@ impl Cell {
     }
     fn new_random_position(&self, rng_obj: &mut ChaCha8Rng) -> isize {
         let compliment_ranges = self.genome_range.clone() - self.replication_state.clone();
-        let range_uniforms: Vec<Uniform<usize>> = compliment_ranges
-            .ranges()
-            .map(|r| Uniform::new(r.start(), r.end() + 1))
-            .collect();
-        let region_lengths: Vec<usize> = compliment_ranges
-            .ranges()
-            .map(|r| r.end() + 1 - r.start())
-            .collect();
+        let mut range_uniforms: Vec<Uniform<isize>> =
+            Vec::with_capacity((self.max_forks * 3) as usize);
+        let mut region_lengths: Vec<isize> = Vec::with_capacity((self.max_forks * 3) as usize);
+        for range in compliment_ranges.ranges() {
+            range_uniforms.push(Uniform::new(range.start(), range.end() + 1));
+            region_lengths.push(range.end() + 1 - range.start());
+        }
+
         let mut new_initiation_pos: isize = -1;
         match WeightedIndex::new(&region_lengths) {
             Ok(valid_dist) => {
                 while new_initiation_pos < 0 {
                     let samp_range = range_uniforms[valid_dist.sample(rng_obj)];
                     if rng_obj.gen::<f64>() > 0.9 {
-                        new_initiation_pos = samp_range.sample(rng_obj) as isize;
+                        new_initiation_pos = samp_range.sample(rng_obj);
                     };
                 }
                 new_initiation_pos
@@ -84,10 +84,10 @@ impl Cell {
 
         // Replication run
         let now = Instant::now();
-        let mut num_iterations: usize = 0;
+        let mut num_iterations: isize = 0;
         while !self.is_fully_replicated() {
             // Work out how many forks are current assigned, based on replication_state
-            let mut assigned_forks: usize = self.replication_state.ranges().len();
+            let mut assigned_forks: isize = self.replication_state.ranges().len() as isize;
             if assigned_forks > 1 {
                 if self.replication_state.contains(0) {
                     assigned_forks -= 1;
@@ -105,7 +105,7 @@ impl Cell {
                 if sample_out < 0 {
                     break;
                 }
-                let new_pos = sample_out as usize;
+                let new_pos = sample_out;
                 // Assign two new forks
                 self.replication_state |= RangeSetBlaze::from_iter([
                     new_pos..=(new_pos + self.replication_rate),
@@ -115,7 +115,7 @@ impl Cell {
             }
 
             // Move all forks
-            self.replication_state |= self
+            self.replication_state = self
                 .replication_state
                 .ranges()
                 .map(|range| {
@@ -123,10 +123,10 @@ impl Cell {
                     let upper = (range.end() + self.replication_rate).min(self.genome_length);
                     lower..=upper
                 })
-                .collect::<RangeSetBlaze<usize>>();
+                .collect::<RangeSetBlaze<isize>>();
             // println!("{:?}", self.replication_state);
             // println!(" ");
-            // thread::sleep(Duration::from_millis(200));
+            // thread::sleep(Duration::from_millis(20));
             // Update iterations
             num_iterations += 1;
         }
@@ -140,10 +140,10 @@ impl Cell {
 
 fn main() {
     // Create a prototype genome
-    let chrom_size: usize = 500_000_000;
-    let num_replicators: usize = chrom_size / 1_600_000;
-    // let chrom_size: usize = 100_000;
-    // let num_replicators: usize = 12;
+    let chrom_size: isize = 500_000_000;
+    let num_replicators: isize = chrom_size / 1_600_000;
+    // let chrom_size: usize = 10_000;
+    // let num_replicators: usize = 10;
     let mut cell = Cell::new(chrom_size, num_replicators, 50);
 
     // Basic checking
