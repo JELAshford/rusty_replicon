@@ -47,27 +47,26 @@ impl Cell {
     }
     fn new_random_position(&self, rng_obj: &mut ChaCha8Rng) -> isize {
         let compliment_ranges = self.genome_range.clone() - self.replication_state.clone();
-        let mut range_uniforms: Vec<Uniform<isize>> =
-            Vec::with_capacity((self.max_forks * 3) as usize);
-        let mut region_lengths: Vec<isize> = Vec::with_capacity((self.max_forks * 3) as usize);
+        let num_samples = (self.max_forks * 3) as usize;
+        let mut range_uniforms: Vec<Uniform<isize>> = Vec::with_capacity(num_samples);
+        let mut region_lengths: Vec<isize> = Vec::with_capacity(num_samples);
         for range in compliment_ranges.ranges() {
             range_uniforms.push(Uniform::new(range.start(), range.end() + 1));
             region_lengths.push(range.end() + 1 - range.start());
         }
 
+        let valid_dist = match WeightedIndex::new(&region_lengths) {
+            Ok(valid_dist) => valid_dist,
+            Err(_err) => return -1,
+        };
         let mut new_initiation_pos: isize = -1;
-        match WeightedIndex::new(&region_lengths) {
-            Ok(valid_dist) => {
-                while new_initiation_pos < 0 {
-                    let samp_range = range_uniforms[valid_dist.sample(rng_obj)];
-                    if rng_obj.gen::<f64>() > 0.9 {
-                        new_initiation_pos = samp_range.sample(rng_obj);
-                    };
-                }
-                new_initiation_pos
-            }
-            Err(_err) => new_initiation_pos,
+        while new_initiation_pos < 0 {
+            let samp_range = range_uniforms[valid_dist.sample(rng_obj)];
+            if rng_obj.gen::<f64>() > 0.9 {
+                new_initiation_pos = samp_range.sample(rng_obj);
+            };
         }
+        new_initiation_pos
     }
     fn full_replication(&mut self, g_phase_prob: f64) {
         let mut rng = ChaCha8Rng::seed_from_u64(1701);
