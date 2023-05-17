@@ -1,10 +1,6 @@
-use rand::{
-    distributions::Distribution,
-    distributions::{Uniform, WeightedIndex},
-    prelude::*,
-};
 use rand_chacha::ChaCha8Rng;
 use std::time::Instant;
+use rand::prelude::*;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 enum CellState {
@@ -13,22 +9,21 @@ enum CellState {
     SPhase,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct Cell {
     genome_length: usize,
-    num_replicators: usize,
     unassigned_replicators: usize,
     cell_state: CellState,
     replication_rate: usize,
     replication_state: Vec<usize>,
 }
+
 impl Cell {
     fn new(genome_length: usize, num_replicators: usize, replication_rate: usize) -> Self {
         let mut start_vec: Vec<usize> = vec![0; (num_replicators * 2) + 3];
         start_vec[1] = genome_length;
         Cell {
             genome_length,
-            num_replicators,
             unassigned_replicators: num_replicators,
             cell_state: CellState::GPhase,
             replication_rate,
@@ -68,45 +63,51 @@ impl Cell {
     fn assign_replicators(&mut self, rng_obj: &mut ChaCha8Rng) {
         // If there are unassigned replicators, assign them
         while self.unassigned_replicators > 0 {
-            // Setup RNG
-            let mut cumsum: usize = 0;
-            let mut random_ranges: Vec<Uniform<usize>> = Vec::with_capacity(self.num_replicators);
-            let mut region_lengths: Vec<usize> = Vec::with_capacity(self.num_replicators);
-            for (ind, length) in self.replication_state.iter().enumerate() {
-                let ilength = *length as isize;
-                if (ind % 2 != 0) & (ilength != 0) {
-                    let unif_range = Uniform::new(cumsum, cumsum + length);
-                    region_lengths.push(*length);
-                    random_ranges.push(unif_range);
-                }
-                cumsum += length;
-            }
-            // Choose a randomly generated point, weighted between ranges by range length
-            let mut new_initiation_pos: isize = -1;
-            match WeightedIndex::new(&region_lengths) {
-                Ok(valid_dist) => {
-                    while new_initiation_pos < 0 {
-                        let samp_range = random_ranges[valid_dist.sample(rng_obj)];
-                        let sample_pos = samp_range.sample(rng_obj);
-                        if rng_obj.gen::<f64>() > 0.9 {
-                            new_initiation_pos = sample_pos as isize;
-                        };
+            // Calculate number of unreplicated regions
+            let num_unreplicated: usize = self.replication_state
+                .iter()
+                .enumerate()
+                .filter_map(|(ind, val)| {
+                    if ind % 2 != 0 {
+                        Some(val)
+                    } else {
+                        None
                     }
-                }
-                Err(_err) => return, // no more places to choose
+                })
+                .sum();
+            if num_unreplicated == 0 {
+                return
             }
-            let position: usize = new_initiation_pos as usize;
 
-            // Identify insertion location
-            let mut insert_index: usize = 0;
+            // Sample from the number of unreplicated regions, storing genome position
             let mut cumsum: usize = 0;
-            for (ind, length) in self.replication_state.iter().enumerate() {
-                insert_index = ind;
-                cumsum += length;
-                if position < cumsum {
-                    break;
+            let mut insert_index: usize = 0;
+            let mut position: isize = -1; 
+            while position < 0 {
+                let sample_unreplicated_index: usize = rng_obj.gen_range(0..num_unreplicated);
+                // Convert index to genome position
+                cumsum = 0;
+                let mut genome_position: usize = 0;
+                let mut unreplicated_remainder: usize = sample_unreplicated_index;
+                for (ind, length) in self.replication_state.iter().enumerate() {
+                    if ind % 2 != 0 {
+                        if unreplicated_remainder < *length {
+                            insert_index = ind;
+                            genome_position = cumsum + unreplicated_remainder;
+                            cumsum += length;
+                            break
+                        }
+                        unreplicated_remainder -= length;
+                    }
+                    cumsum += length;                            
                 }
+                // Random chance check if this position can be used
+                if rng_obj.gen::<f64>() > 0.9 {
+                    position = genome_position as isize;
+                };
             }
+            let position = position as usize;
+
             // Get current bin state and work out adjacent values
             let current_length = self.replication_state[insert_index];
             let left_count = position + current_length - cumsum;
