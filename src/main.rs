@@ -1,6 +1,6 @@
+use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use std::time::Instant;
-use rand::prelude::*;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 enum CellState {
@@ -64,25 +64,20 @@ impl Cell {
         // If there are unassigned replicators, assign them
         while self.unassigned_replicators > 0 {
             // Calculate number of unreplicated regions
-            let num_unreplicated: usize = self.replication_state
+            let num_unreplicated: usize = self
+                .replication_state
                 .iter()
                 .enumerate()
-                .filter_map(|(ind, val)| {
-                    if ind % 2 != 0 {
-                        Some(val)
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|(ind, val)| if ind % 2 != 0 { Some(val) } else { None })
                 .sum();
             if num_unreplicated == 0 {
-                return
+                return;
             }
 
             // Sample from the number of unreplicated regions, storing genome position
             let mut cumsum: usize = 0;
             let mut insert_index: usize = 0;
-            let mut position: isize = -1; 
+            let mut position: isize = -1;
             while position < 0 {
                 let sample_unreplicated_index: usize = rng_obj.gen_range(0..num_unreplicated);
                 // Convert index to genome position
@@ -95,11 +90,11 @@ impl Cell {
                             insert_index = ind;
                             genome_position = cumsum + unreplicated_remainder;
                             cumsum += length;
-                            break
+                            break;
                         }
                         unreplicated_remainder -= length;
                     }
-                    cumsum += length;                            
+                    cumsum += length;
                 }
                 // Random chance check if this position can be used
                 if rng_obj.gen::<f64>() > 0.9 {
